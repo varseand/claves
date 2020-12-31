@@ -1,5 +1,7 @@
 ```diff
-- This is alpha release of the software. Use with caution. You are responsible for proper management of your AWS account, any resources created by this software and all associated costs. 
+- This is alpha release of the software. Use with caution. 
+- You are responsible for proper management of your AWS account,
+- any resources created by this software and all associated costs. 
 ```
 
 # 1. Overview

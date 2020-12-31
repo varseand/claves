@@ -9,7 +9,7 @@ setuptools.setup(
     version="1.0.a1",
     author="Krzysztof Katowicz-Kowalewski",
     author_email="vnd@vndh.net",
-    description="Tool for code enclaves management",
+    description="Manage your code enclaves on AWS.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/varseand/claves",
