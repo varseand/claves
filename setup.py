@@ -25,7 +25,7 @@ setuptools.setup(
     ],
     include_package_data=True,
     package_data={
-        "": "data/*.yaml"
+        "": ["data/enclave.yaml"]
     },
     classifiers=[
         "Development Status :: 3 - Alpha",
