@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="claves",
-    version="1.0.a1",
+    version="1.0a1",
     author="Krzysztof Katowicz-Kowalewski",
     author_email="vnd@vndh.net",
     description="Manage your code enclaves on AWS.",
@@ -15,7 +15,7 @@ setuptools.setup(
     url="https://github.com/varseand/claves",
     packages=[
         "claves",
-    ]
+    ],
     install_requires=[
         "boto3",
         "PyYAML",
