@@ -21,7 +21,7 @@ class AWSManager(object):
         self.__ec2 = boto3.client("ec2", region_name=region)
 
     def create_stack(self, name, repository, keypair, instance_type, git_userdata):
-        template_body = pkg_resources.resource_string(__name__, "data/enclave.yaml")
+        template_body = pkg_resources.resource_string(__name__, "data/enclave.yaml").decode("utf-8")
 
         parameters = [
             {
