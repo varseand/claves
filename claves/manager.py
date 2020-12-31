@@ -9,7 +9,11 @@ class AWSManager(object):
 
     @staticmethod
     def list_regions():
-        return [region["RegionName"] for region in boto3.client("ec2").describe_regions()["Regions"]]
+        client = boto3.client("ec2", region_name="us-east-1")
+
+        return [region["RegionName"]
+                for region
+                in client.describe_regions()["Regions"]]
 
     def __init__(self, region):
         self.__cloudformation = boto3.client("cloudformation", region_name=region)

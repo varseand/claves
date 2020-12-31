@@ -5,25 +5,31 @@ import os
 import sys
 import re
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoRegionError
 from .manager import AWSManager
 from .provider import CodeCommitProvider
 from .utils import *
 
 
+class ApplicationError(RuntimeError):
+
+    def __init__(self, message, code):
+        super().__init__(message, code)
+
+
 def run_create(parsed, aws_manager, codecommit):
 
     if not parsed.keypair:
-        print_text("No key pair provided and no default key pair set (export CLAVES_KEYPAIR).", 1001)
+        raise ApplicationError("You must specify a key pair. You can also configure your key pair by exporting CLAVES_KEYPAIR.", 1001)
 
     if not parsed.repository:
-        print_text("No repository provided.", 1002)
+        raise ApplicationError("You must specify a repository.", 1002)
 
     if parsed.instance_family not in ("t3", "t4g"):
-        print_text("EC2 family %r is not supported." % (parsed.instance_family, ), 1008)
+        raise ApplicationError("EC2 family %r is not supported." % (parsed.instance_family, ), 1008)
 
     if parsed.instance_size not in ("nano", "micro", "small", "medium"):
-        print_text("EC2 size %r is not supported." % (parsed.instance_size, ), 1009)
+        raise ApplicationError("EC2 size %r is not supported." % (parsed.instance_size, ), 1009)
 
     instance_type = f"{parsed.instance_family}.{parsed.instance_size}"
 
@@ -33,7 +39,7 @@ def run_create(parsed, aws_manager, codecommit):
     except ClientError as error:
         if error.response["Error"]["Code"] != "InvalidKeyPair.NotFound":
             raise
-        print_text("The key pair %r does not exist" % parsed.keypair, 1003)
+        raise ApplicationError("The key pair %r does not exist" % (parsed.keypair, ), 1003)
 
     try:
         repository = codecommit.get_repository(parsed.repository)
@@ -41,22 +47,22 @@ def run_create(parsed, aws_manager, codecommit):
     except ClientError as error:
         if error.response["Error"]["Code"] != "RepositoryDoesNotExistException":
             raise
-        print_text("Repository %r does not exist." % parsed.repository, 1004)
+        raise ApplicationError("Repository %r does not exist." % (parsed.repository, ), 1004)
 
     enclaves = aws_manager.list_enclaves(verbose=True)
     needle = {"ParameterKey": "RepositoryArn", "ParameterValue": repository["Arn"]}
     reserved_names = list(enclave["StackName"] for enclave in enclaves)
 
     if any(True for enclave in enclaves if needle in enclave["Parameters"]) and not parsed.force:
-        print_text("Code enclave for repository %r already exists (use --force to create anyway)." % repository['repositoryName'], 1005)
+        raise ApplicationError("Code enclave for repository %r already exists (use --force to create anyway)." % (repository['repositoryName'], ), 1005)
 
     if parsed.name is None:
         parsed.name = get_next_free_name_like(f"CodeEnclaveFor{repository['repositoryName']}", reserved_names)
         if parsed.name is None:
-            print_text("Too much code enclaves for repository %r" % repository['repositoryName'], 1006)
+            raise ApplicationError("Too much code enclaves for repository %r" % (repository['repositoryName'], ), 1006)
 
     elif parsed.name in reserved_names:
-        print_text("Code enclave with the name %r already exists." % parsed.name, 1007)
+        raise ApplicationError("Code enclave with the name %r already exists." % (parsed.name, ), 1007)
 
     aws_manager.create_stack(
         parsed.name,
@@ -67,20 +73,20 @@ def run_create(parsed, aws_manager, codecommit):
 
     enclaves = aws_manager.list_enclaves(name_pattern=as_literal(parsed.name),
                                          verbose=True)
-    print_yaml(enclaves, 0)
+    print_yaml(enclaves)
 
 
 def run_delete(parsed, aws_manager):
 
     if not parsed.name and not parsed.repository:
-        print_text("Neither --name nor --repository provided.", 2001)
+        raise ApplicationError("You must specify either --name or --repository.", 2001)
 
     enclaves = aws_manager.list_enclaves(name_pattern=as_pattern(parsed.name),
                                          repository_pattern=as_pattern(parsed.repository),
                                          verbose=parsed.verbose)
     enclaves_count = len(enclaves)
     if enclaves_count == 0:
-        print_text("No code enclaves to delete.", 0)
+        raise ApplicationError("No code enclaves to delete.", 0)
 
     try:
         print_text("The following code enclave%s will be deleted:" % (
@@ -97,9 +103,9 @@ def run_delete(parsed, aws_manager):
                 aws_manager.delete_stack(enclave["StackName"])
 
             print_text("Deletion of %s was initiated." % (
-                f"{enclaves_count} code enclaves" if enclaves_count > 1 else "code enclave", ), 0)
+                f"{enclaves_count} code enclaves" if enclaves_count > 1 else "code enclave", ))
         else:
-            print_text("No code enclaves deleted.", 0)
+            print_text("No code enclaves deleted.")
 
     except StopIteration:
         pass
@@ -110,20 +116,19 @@ def run_list(parsed, aws_manager):
     enclaves = aws_manager.list_enclaves(name_pattern=as_pattern(parsed.name),
                                          repository_pattern=as_pattern(parsed.repository),
                                          verbose=parsed.verbose)
-
     if len(enclaves) == 0:
-        print_text("No code enclaves to list.", 0)
+        raise ApplicationError("No code enclaves to list.", 0)
 
-    print_yaml(enclaves, 0)
+    print_yaml(enclaves)
 
 
 def run_repositories(parsed, codecommit):
 
     repositories = codecommit.list_repositories(name_pattern=as_pattern(parsed.name))
     if len(repositories) == 0:
-        print_text("No repositories to list.", 0)
+        raise ApplicationError("No repositories to list.", 0)
 
-    print_yaml(repositories, 0)
+    print_yaml(repositories)
 
 
 def run(args):
@@ -285,25 +290,31 @@ def run(args):
             parsed.repository_region = parsed.region
 
     allowed_regions = AWSManager.list_regions()
+    try:
+        if parsed.instance_region is not None and parsed.instance_region not in allowed_regions:
+            raise ApplicationError("Invalid region: %r." % (parsed.instance_region, ), 1)
 
-    if parsed.instance_region is not None and parsed.instance_region not in allowed_regions:
-        print_text("Invalid instance region: %r." % (parsed.instance_region, ), 1)
+        aws_manager = AWSManager(parsed.instance_region)
 
-    aws_manager = AWSManager(parsed.instance_region)
+        if parsed.repository_region is not None and parsed.repository_region not in allowed_regions:
+            raise ApplicationError("Invalid region: %r." % (parsed.repository_region, ), 1)
 
-    if parsed.repository_region is not None and parsed.repository_region not in allowed_regions:
-        print_text("Invalid repository region: %r." % (parsed.repository_region, ), 1)
+        codecommit = CodeCommitProvider(parsed.repository_region)
 
-    codecommit = CodeCommitProvider(parsed.repository_region)
+        if parsed.command == "create":
+            run_create(parsed, aws_manager, codecommit)
+        elif parsed.command == "delete":
+            run_delete(parsed, aws_manager)
+        elif parsed.command == "list":
+            run_list(parsed, aws_manager)
+        elif parsed.command == "repositories":
+            run_repositories(parsed, codecommit)
 
-    if parsed.command == "create":
-        run_create(parsed, aws_manager, codecommit)
-    elif parsed.command == "delete":
-        run_delete(parsed, aws_manager)
-    elif parsed.command == "list":
-        run_list(parsed, aws_manager)
-    elif parsed.command == "repositories":
-        run_repositories(parsed, codecommit)
+        else:  # none or invalid command
+            parser.print_help()
 
-    else:  # none or invalid command
-        parser.print_help()
+    except NoRegionError as error:
+        print_text("You must specify a region. You can also configure your region by running \"aws configure\".", 2)
+
+    except ApplicationError as error:
+        print_text(*error.args)
