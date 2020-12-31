@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="claves",
-    version="1.0a2",
+    version="1.0a3",
     author="Krzysztof Katowicz-Kowalewski",
     author_email="vnd@vndh.net",
     description="Manage your code enclaves on AWS.",
@@ -23,6 +23,10 @@ setuptools.setup(
     scripts=[
         "bin/claves",
     ],
+    include_package_data=True,
+    package_data={
+        "": "data/*.yaml"
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Console",

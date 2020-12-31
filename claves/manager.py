@@ -1,6 +1,7 @@
 import boto3
 import json
 import re
+import pkg_resources
 
 from os import path
 
@@ -20,9 +21,7 @@ class AWSManager(object):
         self.__ec2 = boto3.client("ec2", region_name=region)
 
     def create_stack(self, name, repository, keypair, instance_type, git_userdata):
-
-        with open(path.join(path.dirname(__file__), "enclave.yaml")) as handle:
-            template_body = handle.read()
+        template_body = pkg_resources.resource_string(__name__, "data/enclave.yaml")
 
         parameters = [
             {
